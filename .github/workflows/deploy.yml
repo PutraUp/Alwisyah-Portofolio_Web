@@ -4,7 +4,7 @@ name: Continuous Integration & Continuous Deployment (CI/CD)
 on:
   push:
     branches:
-      - main  # Ubah ke 'master' jika repositorimu menggunakan branch master
+      - main  
 
 jobs:
   deploy:
