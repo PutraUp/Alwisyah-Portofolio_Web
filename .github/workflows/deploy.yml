@@ -1,0 +1,59 @@
+name: Continuous Integration & Continuous Deployment (CI/CD)
+
+# 1. Trigger: Menjalankan otomatisasi setiap kali ada push ke branch utama (main/master)
+on:
+  push:
+    branches:
+      - main  # Ubah ke 'master' jika repositorimu menggunakan branch master
+
+jobs:
+  deploy:
+    name: Deploy to Azure VM via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      # Langkah 1: Checkout repository agar GitHub Actions bisa membaca source code (opsional tapi baik untuk pelacakan)
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Langkah 2: Koneksi SSH dan Eksekusi Perintah Deployment di VPS Azure
+      - name: SSH Connection and Deployment Execution
+        uses: appleboy/ssh-action@master
+        with:
+          host: 70.153.85.175
+          username: azureuser
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            echo "============ [1/4] MENYIAPKAN DIREKTORI PROYEK ============"
+            cd /var/www/html
+            
+            echo "============ [2/4] MENARIK KODE TERBARU DARI GITHUB ============"
+            # Melakukan pull paksa untuk menghindari conflict lokal di server
+            sudo git reset --hard HEAD
+            sudo git pull origin main
+            
+            echo "============ [3/4] MELAKUKAN BUILD IMAGE DOCKER BARU ============"
+            # Membangun image Docker baru dengan tag 'latest'
+            sudo docker build -t web-portofolio .
+            
+            echo "============ [4/4] RE-DEPLOY DOCKER CONTAINER ============"
+            # Menghentikan kontainer lama jika sedang berjalan
+            if [ "$(sudo docker ps -aq -f name=portofolio-app)" ]; then
+                echo "Menghentikan dan menghapus kontainer lama..."
+                sudo docker stop portofolio-app
+                sudo docker rm portofolio-app
+            fi
+            
+            # Menjalankan kontainer baru di port internal 3000
+            sudo docker run -d \
+              --name portofolio-app \
+              -p 3000:80 \
+              --restart unless-stopped \
+              web-portofolio
+            
+            # Pembersihan sistem (Pruning) agar penyimpanan VPS tidak penuh oleh cache image lama
+            echo "Membersihkan image Docker yang tidak terpakai..."
+            sudo docker image prune -f
+            
+            echo "================ DEPLOYMENT SELESAI SAKSES! ================"
